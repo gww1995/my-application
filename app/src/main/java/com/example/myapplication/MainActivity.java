@@ -205,6 +205,21 @@ public class MainActivity extends AppCompatActivity {
 
             Log.e(TAG, "用户输入：" + userInput);
 
+            NetworkTestUtil.testNetworkConnectivity(new NetworkTestUtil.OnNetworkTestListener() {
+                @Override
+                public void onResult(boolean isConnected) {
+                    if (isConnected){
+                        Log.d("Network","网络通畅");
+                    }else {
+                        Log.d("Network","网络异常");
+                    }
+                }
+                @Override
+                public void onError(Exception e) {
+                    Log.e("Network", "网络异常：" + e.getMessage());
+                }
+            });
+
             douBaoManager.sendMessage(userInput, new DouBaoManager.DoubaoCallback() {
                 @Override
                 public void onSuccess(String response) {
