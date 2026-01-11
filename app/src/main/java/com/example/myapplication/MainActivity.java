@@ -199,7 +199,7 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "请输入内容～", Toast.LENGTH_SHORT).show();
             }
 
-            tvChatRecord.append(Html.fromHtml(String.format("<font color='#FFB74D'>我：%s</font> \n", userInput), Html.FROM_HTML_MODE_LEGACY));
+            tvChatRecord.append(Html.fromHtml(String.format("<font color='#FFB74D'>我：%s</font> <br>", userInput), Html.FROM_HTML_MODE_LEGACY));
             etAiInput.setText("");
             scrollChat.post(() -> scrollChat.fullScroll(ScrollView.FOCUS_DOWN));
 
@@ -225,7 +225,7 @@ public class MainActivity extends AppCompatActivity {
                 public void onSuccess(String response) {
                     // 主线程更新 UI
                     runOnUiThread(() -> {
-                        tvChatRecord.append(Html.fromHtml(String.format("<font color='#757575'>AI：%s</font> \n", response), Html.FROM_HTML_MODE_LEGACY));
+                        tvChatRecord.append(Html.fromHtml(String.format("<font color='#757575'>AI：%s</font> <br>", response), Html.FROM_HTML_MODE_LEGACY));
                         tvChatRecord.setMovementMethod(LinkMovementMethod.getInstance());
                         scrollChat.post(() -> scrollChat.fullScroll(ScrollView.FOCUS_DOWN));
                     });
