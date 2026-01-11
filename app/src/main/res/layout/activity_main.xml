@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFF8E1"
+    android:orientation="vertical">
+
+    <!-- 顶部标题栏（保留原有） -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="#FFB74D"
+        android:elevation="2dp"
+        app:title="儿童情绪监测装置"
+        app:titleTextColor="#FFFFFF" />
+
+    <!-- 页面内容容器：切换显示「设备监测」和「AI对话」 -->
+    <FrameLayout
+        android:id="@+id/content_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp">
+
+        <include layout="@layout/monitor_page" />
+
+        <include layout="@layout/ai_chat_page" />
+
+    </FrameLayout>
+
+    <!-- 底部导航栏 -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_nav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:elevation="6dp"
+        app:menu="@menu/menu_bottom_nav"
+        app:itemIconTint="#FFB74D"
+        app:itemTextColor="#FFB74D"
+        app:itemRippleColor="#FFE0B2"
+        app:labelVisibilityMode="labeled"
+        app:itemHorizontalTranslationEnabled="false"/>
+
+</LinearLayout>

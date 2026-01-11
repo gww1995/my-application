@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 设备监测（原有功能） -->
+    <item
+        android:id="@+id/nav_monitor"
+        android:title="@string/nav_button_monitor"
+        android:icon="@drawable/bluetooth_24px"
+        /> <!-- 无图标则删除此行 -->
+
+    <!-- AI对话（新增功能） -->
+    <item
+        android:id="@+id/nav_ai_chat"
+        android:title="@string/nav_button_ai"
+        android:icon="@drawable/chat_bubble_24px"
+        /> <!-- 无图标则删除此行 -->
+</menu>

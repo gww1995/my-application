@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">My Application</string>
+    <string name="app_title">连接掌控板监测设备</string>
+    <string name="nav_button_ai">AI对话</string>
+    <string name="nav_button_monitor">设备监测</string>
+</resources>
