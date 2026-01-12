@@ -1,7 +1,10 @@
 package com.example.myapplication;
 
 import android.content.Context;
+import android.text.Html;
+import android.text.method.LinkMovementMethod;
 import android.util.Log;
+import android.widget.ScrollView;
 
 import androidx.annotation.NonNull;
 

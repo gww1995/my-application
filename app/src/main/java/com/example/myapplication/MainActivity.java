@@ -18,9 +18,11 @@ import android.text.Html;
 import android.text.method.LinkMovementMethod;
 import android.util.Log;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -108,6 +110,10 @@ public class MainActivity extends AppCompatActivity {
     private final Random random = new Random();
     private final Handler handler = new Handler(Looper.getMainLooper());
 
+    //添加适配器
+    private android.widget.ArrayAdapter<String> deviceListAdapter;
+    private android.widget.ListView deviceListView;
+
     // 主线程更新UI的Handler
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -125,7 +131,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
                 isScanning = false;
-                btnConnect.setText("连接掌控板监测设备");
+                btnConnect.setText("蓝牙设备连接");
                 btnConnect.setEnabled(true);
                 refreshDeviceDialog(true);
                 Log.i(TAG, "蓝牙扫描结束，共发现设备数量：" + scanDeviceList.size());
@@ -199,21 +205,8 @@ public class MainActivity extends AppCompatActivity {
 
             Log.e(TAG, "用户输入：" + userInput);
 
-            NetworkTestUtil.testNetworkConnectivity(new NetworkTestUtil.OnNetworkTestListener() {
-                @Override
-                public void onResult(boolean isConnected) {
-                    if (isConnected) {
-                        Log.d("Network", "网络通畅");
-                    } else {
-                        Log.d("Network", "网络异常");
-                    }
-                }
-
-                @Override
-                public void onError(Exception e) {
-                    Log.e("Network", "网络异常：" + e.getMessage());
-                }
-            });
+            // 网络测试
+//            networkTest();
 
             douBaoManager.sendMessage(userInput, new DouBaoManager.DoubaoCallback() {
                 @Override
@@ -235,6 +228,27 @@ public class MainActivity extends AppCompatActivity {
 
         });
 
+    }
+
+    /**
+     * 检测网络连接是否正常
+     */
+    private static void networkTest() {
+        NetworkTestUtil.testNetworkConnectivity(new NetworkTestUtil.OnNetworkTestListener() {
+            @Override
+            public void onResult(boolean isConnected) {
+                if (isConnected) {
+                    Log.d("Network", "网络通畅");
+                } else {
+                    Log.d("Network", "网络异常");
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.e("Network", "网络异常：" + e.getMessage());
+            }
+        });
     }
 
     // 初始化导航栏
@@ -275,17 +289,15 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         btnConnect = findViewById(R.id.btnConnectDevice);
 
-        //
+        // 绑定监控图表
         tempLineChart = findViewById(R.id.tempLineChart);
         heartLineChart = findViewById(R.id.heartLineChart);
         spo2LineChart = findViewById(R.id.spo2LineChart);
 
         // 初始化体温图表（红色折线）
         initSingleLineChart(tempLineChart, tempEntries, "体温(℃)", 0xFFFF5722, TEMP_MIN - 5, TEMP_MAX + 5);
-
         // 初始化心率图表（橙色折线）
         initSingleLineChart(heartLineChart, heartEntries, "心率(次/分)", 0xFFFFB74D, HEART_MIN - 20, HEART_MAX + 50);
-
         // 初始化血氧图表（绿色折线）
         initSingleLineChart(spo2LineChart, spo2Entries, "血氧(%)", 0xFF4CAF50, SPO2_MIN - 5, SPO2_MAX);
 
@@ -308,8 +320,7 @@ public class MainActivity extends AppCompatActivity {
                 addToLineChart(tempValue, heartValue, spo2Value);
 
                 // 3. 打印日志验证
-                Log.d(TAG, String.format("更新数据：体温=%.1f℃，心率=%.0f次/分，血氧=%.1f%%",
-                        tempValue, heartValue, spo2Value));
+                Log.d(TAG, String.format("更新数据：体温=%.1f℃，心率=%.0f次/分，血氧=%.1f%%", tempValue, heartValue, spo2Value));
 
                 // 4. 递增索引，循环执行
                 dataIndex++;
@@ -335,8 +346,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 单个图表添加数据（保证数据隔离，仅更新当前图表）
      */
-    private void addDataToSingleChart(LineChart lineChart, List<Entry> entries,
-                                      LineData lineData, float value) {
+    private void addDataToSingleChart(LineChart lineChart, List<Entry> entries, LineData lineData, float value) {
         // 1. 添加新数据（X轴为数据索引，Y轴为随机生成的数值）
         entries.add(new Entry(dataIndex, value));
 
@@ -369,12 +379,11 @@ public class MainActivity extends AppCompatActivity {
      * @param yMin      Y轴最小值
      * @param yMax      Y轴最大值
      */
-    private void initSingleLineChart(LineChart lineChart, List<Entry> entries,
-                                     String label, int color, float yMin, float yMax) {
+    private void initSingleLineChart(LineChart lineChart, List<Entry> entries, String label, int color, float yMin, float yMax) {
         // 1. 基础交互配置（支持拖拽、禁止缩放、支持滑动）
         lineChart.setDragEnabled(true); // 允许拖拽
-        lineChart.setScaleEnabled(false); // 禁止缩放（保持X轴数据整洁）
-        lineChart.setPinchZoom(false); // 禁止双指缩放
+        lineChart.setScaleEnabled(true); // 禁止缩放（保持X轴数据整洁）
+        lineChart.setPinchZoom(true); // 禁止双指缩放
         lineChart.setAutoScaleMinMaxEnabled(false); // 禁止自动缩放Y轴
 
         // 2. 隐藏描述文字（右下角默认描述）
@@ -536,7 +545,7 @@ public class MainActivity extends AppCompatActivity {
     // 显示蓝牙设备选择弹窗
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     private void showDeviceDialog() {
-        scanDialogBuilder = new AlertDialog.Builder(this).setTitle("经典蓝牙设备列表（正在扫描...）").setCancelable(false).setNegativeButton("取消", (dialog, which) -> {
+        scanDialogBuilder = new AlertDialog.Builder(this).setTitle("请稍等！正在扫描附近蓝牙设备...").setCancelable(false).setNegativeButton("取消", (dialog, which) -> {
             if (isScanning) bluetoothAdapter.cancelDiscovery();
             dialog.dismiss();
         }).setNeutralButton("停止扫描", (dialog, which) -> {
@@ -550,7 +559,7 @@ public class MainActivity extends AppCompatActivity {
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     private void refreshDeviceDialog(boolean isFinished) {
         if (scanDialogBuilder == null) return;
-        String title = isFinished ? "经典蓝牙设备列表（扫描完成）" : "经典蓝牙设备列表（正在扫描...）";
+        String title = isFinished ? "扫描完成！" : "正在扫描中.... 请稍等!";
         String[] listItems = deviceNameList.toArray(new String[0]);
 
         scanDialogBuilder.setTitle(title).setItems(listItems, (dialog, position) -> {
@@ -653,15 +662,33 @@ public class MainActivity extends AppCompatActivity {
         boolean isHeartAb = heart < HEART_MIN || heart > HEART_MAX;
         boolean isSpo2Ab = spo2 < SPO2_MIN;
 
-        //todo AI助手发送信息到页面
-
         if ((isTempAb || isHeartAb || isSpo2Ab) && vibrator.hasVibrator()) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.VIBRATE) == PackageManager.PERMISSION_GRANTED) {
+
+            // AI 发送提醒信息
+            sendNotifyToAi(temp, heart, spo2);
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.VIBRATE) == PackageManager.PERMISSION_GRANTED)
                 vibrator.vibrate(1000);
-            }
+
         } else {
             vibrator.cancel();
         }
+    }
+
+    /**
+     * 聊天框发送 AI 提醒信息
+     *
+     * @param temp  体温
+     * @param heart 心率
+     * @param spo2  血氧
+     */
+    private void sendNotifyToAi(float temp, float heart, float spo2) {
+        String message = String.format("请检查您的健康状态！您现在的体温为%s℃，心率为%s次/分钟，血氧浓度为%s%s", temp, heart, spo2, "%");
+        runOnUiThread(() -> {
+            tvChatRecord.append(Html.fromHtml(String.format("<font color='#757575'>AI：%s</font> <br>", message), Html.FROM_HTML_MODE_LEGACY));
+            tvChatRecord.setMovementMethod(LinkMovementMethod.getInstance());
+            scrollChat.post(() -> scrollChat.fullScroll(ScrollView.FOCUS_DOWN));
+        });
     }
 
     // 断开蓝牙连接，释放资源
