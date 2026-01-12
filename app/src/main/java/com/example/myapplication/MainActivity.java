@@ -33,6 +33,16 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.AxisBase;
+import com.github.mikephil.charting.components.Description;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.data.Entry;
+import com.github.mikephil.charting.data.LineData;
+import com.github.mikephil.charting.data.LineDataSet;
+import com.github.mikephil.charting.formatter.ValueFormatter;
+import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
@@ -41,6 +51,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 
 @RequiresApi(api = Build.VERSION_CODES.S)
@@ -66,7 +77,6 @@ public class MainActivity extends AppCompatActivity {
 
     // 页面控件
     private Button btnConnect;
-    private CustomLineChartView lineChart;
     private Vibrator vibrator;
     private AlertDialog deviceDialog;
     private AlertDialog.Builder scanDialogBuilder;
@@ -76,17 +86,27 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvChatRecord;
     private EditText etAiInput;
     private ScrollView scrollChat;
+    //监控控件
+    private LineChart tempLineChart, heartLineChart, spo2LineChart;
+
+    // ========== 数据集合（每个图表独立数据，避免串扰） ==========
+    private final List<Entry> tempEntries = new ArrayList<>();
+    private final List<Entry> heartEntries = new ArrayList<>();
+    private final List<Entry> spo2Entries = new ArrayList<>();
 
     // 蓝牙设备列表
     private final List<BluetoothDevice> scanDeviceList = new ArrayList<>();
     private final List<String> deviceNameList = new ArrayList<>();
 
     // 生理数据阈值配置
-    private final float NORMAL_TEMP_MAX = 37.4f;
-    private final float NORMAL_HEART_MIN = 60f;
-    private final float NORMAL_HEART_MAX = 125f;
-    private final float NORMAL_SPO2_MIN = 95f;
+    private static final int MAX_DATA_COUNT = 30; // 每个图表最多显示30个数据点
+    private static final float TEMP_MIN = 35.0f, TEMP_MAX = 40.0f;
+    private static final float HEART_MIN = 60.0f, HEART_MAX = 120.0f;
+    private static final float SPO2_MIN = 95.0f, SPO2_MAX = 100.0f;
     private int bufferIndex = 0; // 缓冲区索引
+    private int dataIndex = 0;
+    private final Random random = new Random();
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     // 主线程更新UI的Handler
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -151,35 +171,9 @@ public class MainActivity extends AppCompatActivity {
                 startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
             } else {
                 startScanClassicDevice();
-
-//                test();
-
+//                startSimulateDataUpdate();
             }
         });
-    }
-
-    private void test() {
-        // 测试：每秒添加一组模拟数据，绘制50次后退出
-        int[] counter = {0}; // 使用数组来让内部类可以修改这个计数器
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (counter[0] >= 50) {
-                    // 达到50次后停止
-                    return;
-                }
-
-                float temp = 36.5f + (float) (Math.random() * 1); // 36.5-37.5℃
-                float heart = 80f + (float) (Math.random() * 20); // 80-100
-                float spo2 = 95f + (float) (Math.random() * 5); // 95-100
-                lineChart.addSensorData(temp, heart, spo2);
-
-                counter[0]++;
-                if (counter[0] < 50) {
-                    this.run(); // 循环调用，直到达到50次
-                }
-            }
-        }, 1000);
     }
 
     // 初始化 AI对话功能
@@ -208,12 +202,13 @@ public class MainActivity extends AppCompatActivity {
             NetworkTestUtil.testNetworkConnectivity(new NetworkTestUtil.OnNetworkTestListener() {
                 @Override
                 public void onResult(boolean isConnected) {
-                    if (isConnected){
-                        Log.d("Network","网络通畅");
-                    }else {
-                        Log.d("Network","网络异常");
+                    if (isConnected) {
+                        Log.d("Network", "网络通畅");
+                    } else {
+                        Log.d("Network", "网络异常");
                     }
                 }
+
                 @Override
                 public void onError(Exception e) {
                     Log.e("Network", "网络异常：" + e.getMessage());
@@ -279,8 +274,154 @@ public class MainActivity extends AppCompatActivity {
         toolbar.setTitle("自闭症儿童情绪监测装置");
         setSupportActionBar(toolbar);
         btnConnect = findViewById(R.id.btnConnectDevice);
-        lineChart = findViewById(R.id.customLineChart);
+
+        //
+        tempLineChart = findViewById(R.id.tempLineChart);
+        heartLineChart = findViewById(R.id.heartLineChart);
+        spo2LineChart = findViewById(R.id.spo2LineChart);
+
+        // 初始化体温图表（红色折线）
+        initSingleLineChart(tempLineChart, tempEntries, "体温(℃)", 0xFFFF5722, TEMP_MIN - 5, TEMP_MAX + 5);
+
+        // 初始化心率图表（橙色折线）
+        initSingleLineChart(heartLineChart, heartEntries, "心率(次/分)", 0xFFFFB74D, HEART_MIN - 20, HEART_MAX + 50);
+
+        // 初始化血氧图表（绿色折线）
+        initSingleLineChart(spo2LineChart, spo2Entries, "血氧(%)", 0xFF4CAF50, SPO2_MIN - 5, SPO2_MAX);
+
     }
+
+
+    /**
+     * 模拟数据定时更新（每秒1次，生成随机数据）
+     */
+    private void startSimulateDataUpdate() {
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // 1. 生成随机数据（贴合实际范围）
+                float tempValue = TEMP_MIN + random.nextFloat() * (TEMP_MAX - TEMP_MIN);
+                float heartValue = HEART_MIN + random.nextFloat() * (HEART_MAX - HEART_MIN);
+                float spo2Value = SPO2_MIN + random.nextFloat() * (SPO2_MAX - SPO2_MIN);
+
+                //// 2. 添加数据到折线图表
+                addToLineChart(tempValue, heartValue, spo2Value);
+
+                // 3. 打印日志验证
+                Log.d(TAG, String.format("更新数据：体温=%.1f℃，心率=%.0f次/分，血氧=%.1f%%",
+                        tempValue, heartValue, spo2Value));
+
+                // 4. 递增索引，循环执行
+                dataIndex++;
+                handler.postDelayed(this, 1000); // 1000ms = 1秒
+            }
+        }, 1000);
+    }
+
+    /**
+     * 添加数据到折线图表
+     *
+     * @param tempValue  体温
+     * @param heartValue 心率
+     * @param spo2Value  血氧
+     */
+    private void addToLineChart(float heartValue, float spo2Value, float tempValue) {
+        addDataToSingleChart(tempLineChart, tempEntries, tempLineChart.getData(), tempValue);
+        addDataToSingleChart(heartLineChart, heartEntries, heartLineChart.getData(), heartValue);
+        addDataToSingleChart(spo2LineChart, spo2Entries, spo2LineChart.getData(), spo2Value);
+        dataIndex++;
+    }
+
+    /**
+     * 单个图表添加数据（保证数据隔离，仅更新当前图表）
+     */
+    private void addDataToSingleChart(LineChart lineChart, List<Entry> entries,
+                                      LineData lineData, float value) {
+        // 1. 添加新数据（X轴为数据索引，Y轴为随机生成的数值）
+        entries.add(new Entry(dataIndex, value));
+
+        // 2. 限制数据量，超过30个则移除最旧数据
+        if (entries.size() > MAX_DATA_COUNT) {
+            entries.remove(0);
+            // 更新X轴范围（实现滑动效果）
+            lineChart.getXAxis().setAxisMinimum(dataIndex - MAX_DATA_COUNT);
+            lineChart.getXAxis().setAxisMaximum(dataIndex);
+        }
+
+        // 3. 通知图表数据更新
+        lineData.notifyDataChanged();
+        lineChart.notifyDataSetChanged();
+        lineChart.setVisibleXRangeMaximum(MAX_DATA_COUNT); // 最多显示30个数据点
+        lineChart.moveViewToX(dataIndex); // 自动滑动到最新数据
+
+        // 4. 刷新图表
+        lineChart.invalidate();
+    }
+
+
+    /**
+     * 初始化单个折线图（通用配置，复用性强）
+     *
+     * @param lineChart 目标折线图
+     * @param entries   数据集合
+     * @param label     折线标签
+     * @param color     折线颜色
+     * @param yMin      Y轴最小值
+     * @param yMax      Y轴最大值
+     */
+    private void initSingleLineChart(LineChart lineChart, List<Entry> entries,
+                                     String label, int color, float yMin, float yMax) {
+        // 1. 基础交互配置（支持拖拽、禁止缩放、支持滑动）
+        lineChart.setDragEnabled(true); // 允许拖拽
+        lineChart.setScaleEnabled(false); // 禁止缩放（保持X轴数据整洁）
+        lineChart.setPinchZoom(false); // 禁止双指缩放
+        lineChart.setAutoScaleMinMaxEnabled(false); // 禁止自动缩放Y轴
+
+        // 2. 隐藏描述文字（右下角默认描述）
+        Description description = new Description();
+        description.setEnabled(false);
+        lineChart.setDescription(description);
+
+        // 3. X轴配置（底部显示，整数刻度，最大显示30个点）
+        XAxis xAxis = lineChart.getXAxis();
+        xAxis.setPosition(XAxis.XAxisPosition.BOTTOM); // X轴显示在底部
+        xAxis.setGranularity(1f); // 刻度间隔1
+        xAxis.setAxisMinimum(0f);
+        xAxis.setAxisMaximum(MAX_DATA_COUNT); // 最大显示30个数据点
+        xAxis.setValueFormatter(new ValueFormatter() {
+            @Override
+            public String getAxisLabel(float value, AxisBase axis) {
+                return String.valueOf((int) value); // X轴标签显示整数
+            }
+        });
+
+        // 4. Y轴配置（左侧显示，固定取值范围，右侧隐藏）
+        YAxis leftYAxis = lineChart.getAxisLeft();
+        leftYAxis.setAxisMinimum(yMin);
+        leftYAxis.setAxisMaximum(yMax);
+        leftYAxis.setGranularity((yMax - yMin) / 5f); // 5个刻度间隔
+        lineChart.getAxisRight().setEnabled(false); // 隐藏右侧Y轴
+
+        // 5. 初始化折线数据集（配置样式）
+        LineDataSet lineDataSet = new LineDataSet(entries, label);
+        lineDataSet.setColor(color); // 折线颜色
+        lineDataSet.setCircleColor(color); // 数据点圆圈颜色
+        lineDataSet.setLineWidth(2f); // 折线宽度
+        lineDataSet.setCircleRadius(3f); // 数据点圆圈半径
+        lineDataSet.setDrawCircleHole(false); // 不绘制数据点圆圈内孔
+        lineDataSet.setDrawValues(false); // 不显示数据点数值（简化界面）
+        lineDataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER); // 平滑曲线（可选：LINEAR 直线）
+
+        // 6. 绑定数据到图表
+        List<ILineDataSet> dataSets = new ArrayList<>();
+        dataSets.add(lineDataSet);
+        LineData lineData = new LineData(dataSets);
+        lineChart.setData(lineData);
+
+        // 7. 刷新图表
+        lineChart.invalidate();
+    }
+
 
     // 初始化蓝牙适配器
     private void initBluetooth() {
@@ -491,14 +632,14 @@ public class MainActivity extends AppCompatActivity {
         if (data.length >= 3) {
             // ====================== 可修改区域 ======================
             // 适配掌控板发送格式：如果是 数值*10 发送（如365=36.5℃），则除以10.0f
-            float temp = data[0];
-            float heart = data[1];
-            float spo2 = data[2];
+            float heart = data[0];
+            float spo2 = data[1];
+            float temp = data[2];
             // =======================================================
 
             Log.d(TAG, "解析数据 → 体温：" + temp + "℃ 心率：" + heart + "次/分 血氧：" + spo2 + "%");
             mainHandler.post(() -> {
-                lineChart.addSensorData(temp, heart, spo2);
+                addToLineChart(heart, spo2, temp);
                 checkDataAbnormal(temp, heart, spo2);
             });
         } else {
@@ -508,9 +649,9 @@ public class MainActivity extends AppCompatActivity {
 
     // 检测生理数据是否异常，并触发震动提醒
     private void checkDataAbnormal(float temp, float heart, float spo2) {
-        boolean isTempAb = temp >= NORMAL_TEMP_MAX;
-        boolean isHeartAb = heart < NORMAL_HEART_MIN || heart > NORMAL_HEART_MAX;
-        boolean isSpo2Ab = spo2 < NORMAL_SPO2_MIN;
+        boolean isTempAb = temp >= TEMP_MAX;
+        boolean isHeartAb = heart < HEART_MIN || heart > HEART_MAX;
+        boolean isSpo2Ab = spo2 < SPO2_MIN;
 
         //todo AI助手发送信息到页面
 
