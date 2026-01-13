@@ -665,7 +665,7 @@ public class MainActivity extends AppCompatActivity {
         if ((isTempAb || isHeartAb || isSpo2Ab) && vibrator.hasVibrator()) {
 
             // AI 发送提醒信息
-            sendNotifyToAi(temp, heart, spo2);
+//            sendNotifyToAi(temp, heart, spo2);
 
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.VIBRATE) == PackageManager.PERMISSION_GRANTED)
                 vibrator.vibrate(1000);
